@@ -1,0 +1,123 @@
+Test and example program for uC/OS-II and avr-gcc 3.x
+-----------------------------------------------------
+
+If you have version 2.52 of uC/OS-II (the one which comes with the book)
+or any version other than 2.70, see notes at the end of this document!
+
+This is a test and example program to be used with uC/OS-II version
+2.70, Atmel's ATmega 128 and avr-gcc version 3.x. This example is a
+modification of the example #1 in Labrosse's book. The modifications
+to AVR were originally made by Ole Saether for the IAR compiler and
+ported to gcc version 2.95 by Jesper Hansen. I have made a number of
+changes to the program including, but not limited to:
+
+- ISR programming is done using a macro UCOSISR(), which is
+defined in avr_isr.h (by me). avr_isr.h is included in the port.
+
+- ISR code is changed a bit to conform to the requirements of uC/OS-II
+as documented by Labrosse's book. The general structure of an ISR
+using my macros is
+
+UCOSISR(validsignalname)
+{
+  PushRS();
+  OSIntEnter();
+  if (OSIntNesting == 1)
+    OSTCBCur->OSTCBStkPtr = (OS_STK *)SP;
+
+  /* Do what you want the ISR to do */
+
+  sei();
+  OSIntExit();
+  PopRS();
+}
+
+UCOSISR() is used instead of macros SIGNAL() and INTERRUPT() from
+avr-libc. DO NOT use SIGNAL() or INTERRUPT() with uC/OS-II, since they
+save only the used registers on the stack, whereas uC/OS-II requires
+that all the registers are saved. If a task switch is needed after or
+during the ISR, the context of the current task will be trashed the
+next time it is run. You can use SIGNAL(), since it does not enable
+interrupts during the ISR, but then you MUST NOT use any of the
+services provided by uC/OS-II. Thus, if you must e.g. signal a task
+using a semaphore, UCOSISR() is the only way to do it.
+
+- PushRS() and PopRS() are also macros provided by avr_isr.h. The push
+and pop all the registers to or from the stack.
+
+- sei() is a macro provided by avr-libc (by including
+avr/interrupt.h). SP (stack pointer) is also provided by avr-libc in
+avr/io.h (or the correct io*.h file included by avr/io.h)
+
+- I use UART Data Register Empty Interrupt instead of UART Transmit
+Complete Interrupt. The main part of the ISR is thus changed a bit and
+PutChar also.
+
+- I/O-ports are accessed using the now preferred syntax, e.g.
+
+	TCCR0=0;                 /* before: outb(TCCR0,0) or outp(0,TCCR0) */
+	UCSR0B &= ~_BV(UDRIE0);  /* before: outb(UCSR0B,inb(UCSR0B) &~ (1<<UDRIE0)) */
+
+  The syntax is now the same as with other compilers for AVR.
+
+- I changed the UART trasmit buffer pointers and counter to 16 bit
+variables in case you want the transmit buffer's length to be more
+than 256 bytes.
+
+- I reduced the number of tasks to 8 and the size of the task stacks
+to 128. This way the program fits into the internal SRAM of ATMega128.
+
+- makefile is now based on the sample makefile distributed with
+Winavr. I have made changes so that uC/OS-II and port sources can
+reside anywhere in your file system and you do not need to have write
+access to these directories. All the created files (object files, hex
+file etc.)  are saved on the current directory (where your application
+sources are). You can therefore copy this example from to your home
+directory and compile it there.
+
+- makefile includes the changes needed to create a coff file from the
+elf file. In order to use this, you need to have avr-binutils pathced
+with Jörg Wunsch's patch. The patch allows avrstudio to simulate your
+code. Be warned though, that due to the limitation of the coff file
+format, include files are problematic. So, in order to be able to step
+into uC/OS-II code, you need to change the main uC/OS-II sources so
+that it is not based on including all the sources into ucos_ii.c. I
+have not done this, but it should be possible. You should be able to
+simulate your application code without these changes.
+
+- you can compile your code with a unix version of avr-gcc, too. See
+the readme.txt file of the port in the doc directory for help on how
+to do this. In fact, in mostly use the linux version of avr-gcc and
+program the device with avrdude. Works perfectly.
+
+Notes to get the example program to work with uC/OS-II v2.52
+------------------------------------------------------------
+
+includes.h
+----------
+
+- uncomment the lines for including os_cpu.h and os_cfg.h (these are
+included in ucos_ii.h from 2.70 on
+
+makefile
+--------
+
+- change the directory names UCOSDIR and PORTDIR to reflect the right directories. 
+- remove os_dbg.c from the list of uC/OS-II source files (UCOSSRC)
+
+os_cfg.h
+--------
+
+- some new definitions are added for v2.70 but there is no need to delete them,
+therefore os_cfg.h can be left unchanged.
+
+I have also provided the modified files as includes.h.252 and makefile.252. You 
+can copy them as includes.h and makefile, but you should anyway check the makefile.
+
+
+
+Feel free to contact me in case of problems both with this program or
+the port.
+
+Julius Luukko (Julius.Luukko@lut.fi)
+21th of July, 2003.
